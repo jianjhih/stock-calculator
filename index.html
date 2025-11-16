@@ -14,7 +14,315 @@
         input[type=number]::-webkit-outer-spin-button { 
             -webkit-appearance: none;
             margin: 0;
+        }<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>整股零股計算器 PWA</title>
+    <!-- 導入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 使用 Inter 字體以獲得更現代的觀感 */
+        body { font-family: 'Inter', sans-serif; }
+        /* 隱藏原生數字輸入的箭頭 */
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none;
+            margin: 0;
         }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+    </style>
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="./manifest.json">
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center p-4">
+
+    <!-- 主容器：針對手機螢幕進行優化 -->
+    <div id="app-container" class="w-full max-w-lg bg-white shadow-2xl rounded-xl p-6 sm:p-8">
+        
+        <header class="text-center mb-6">
+            <h1 class="text-3xl font-extrabold text-indigo-700">股票交易成本計算機</h1>
+            <p class="text-sm text-gray-500 mt-1">整股 (1000 股) / 零股 (1-999 股) 交易</p>
+        </header>
+
+        <!-- 輸入表單區域 -->
+        <div class="space-y-4">
+            <!-- 股價輸入 -->
+            <div class="input-group">
+                <label for="price" class="block text-sm font-medium text-gray-700 mb-1">股價 (每股):</label>
+                <input type="number" id="price" value="100" min="0.01" step="0.01"
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
+                       oninput="calculateCost()">
+            </div>
+
+            <!-- 股數輸入 -->
+            <div class="input-group">
+                <label for="shares" class="block text-sm font-medium text-gray-700 mb-1">股數 (1 股為單位):</label>
+                <input type="number" id="shares" value="1000" min="1"
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
+                       oninput="calculateCost()">
+            </div>
+
+            <hr class="border-gray-100 my-4">
+            
+            <!-- 最低手續費輸入 -->
+            <div class="input-group">
+                <label for="minCommission" class="block text-sm font-medium text-gray-700 mb-1">最低手續費 (元):</label>
+                <input type="number" id="minCommission" value="20" min="0"
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
+                       oninput="calculateCost()">
+            </div>
+            
+            <!-- 手續費折扣輸入 (已設定 28 折預設值) -->
+            <div class="input-group">
+                <label for="discount" class="block text-sm font-medium text-gray-700 mb-1">
+                    手續費折扣 (例如 6折輸入 0.6，預設 0.28):
+                </label>
+                <input type="number" id="discount" value="0.28" step="0.01" min="0.01" max="1.0"
+                       class="w-full p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150"
+                       oninput="calculateCost()">
+            </div>
+        </div>
+
+        <!-- 結果顯示區域 -->
+        <div class="result-box mt-8 bg-indigo-50 border-t-4 border-indigo-500 rounded-lg p-5 shadow-inner">
+            <h2 class="text-xl font-bold text-indigo-700 mb-3">計算結果 (買入成本)</h2>
+            <div class="space-y-2 text-gray-800">
+                <p class="flex justify-between">
+                    <span class="font-medium">股票價值:</span>
+                    <span id="value" class="font-semibold">0</span> <span class="text-sm text-gray-500">元</span>
+                </p>
+                <p class="flex justify-between">
+                    <span class="font-medium">原始手續費 (固定費率 0.1425%):</span>
+                    <span id="rawCommission">0</span> <span class="text-sm text-gray-500">元</span>
+                </p>
+                <p class="flex justify-between border-t border-indigo-200 pt-2">
+                    <span class="font-bold text-indigo-800">實付手續費:</span>
+                    <span id="actualCommission" class="font-extrabold text-lg text-indigo-800">0</span> <span class="text-sm text-gray-500">元</span>
+                </p>
+            </div>
+            
+            <div class="total-cost mt-4 pt-4 border-t-2 border-indigo-700">
+                <p class="flex justify-between items-center text-xl">
+                    <span class="font-extrabold text-indigo-900">總成本:</span>
+                    <span id="totalCost" class="font-extrabold text-2xl text-red-600">0</span> <span class="text-sm text-gray-500">元</span>
+                </p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 訊息提示框 (取代 alert) -->
+    <div id="message-box" class="fixed top-0 left-1/2 -translate-x-1/2 mt-4 transition-all duration-300 transform opacity-0 scale-95 pointer-events-none">
+        <div id="message-content" class="bg-red-500 text-white p-3 rounded-lg shadow-xl font-bold"></div>
+    </div>
+
+<script>
+    // --- Cookie 處理函數 ---
+    const DISCOUNT_KEY = 'commissionDiscount';
+    const MIN_COMMISSION_KEY = 'minCommissionValue'; // 新增最低手續費的 Cookie 鍵值
+
+    /**
+     * 設置 Cookie
+     */
+    function setCookie(name, value, days) {
+        const d = new Date();
+        d.setTime(d.getTime() + (days * 24 * 60 * 60 * 1000));
+        const expires = "expires=" + d.toUTCString();
+        // Path=/ ensures the cookie is available across the entire site
+        document.cookie = name + "=" + value + ";" + expires + ";path=/;SameSite=Lax";
+    }
+
+    /**
+     * 獲取 Cookie
+     */
+    function getCookie(name) {
+        const cname = name + "=";
+        const decodedCookie = decodeURIComponent(document.cookie);
+        const ca = decodedCookie.split(';');
+        for(let i = 0; i < ca.length; i++) {
+            let c = ca[i].trim();
+            if (c.indexOf(cname) == 0) {
+                return c.substring(cname.length, c.length);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 顯示訊息提示框 (取代 alert)
+     */
+    function showMessage(message, type = 'info') {
+        const box = document.getElementById('message-box');
+        const content = document.getElementById('message-content');
+        
+        content.textContent = message;
+        
+        // 根據類型設定樣式
+        content.className = 'p-3 rounded-lg shadow-xl font-bold';
+        if (type === 'error') {
+            content.classList.add('bg-red-600');
+        } else {
+            content.classList.add('bg-blue-600');
+        }
+
+        // 顯示訊息框
+        box.classList.remove('opacity-0', 'scale-95', 'pointer-events-none');
+        box.classList.add('opacity-100', 'scale-100');
+
+        // 3 秒後自動隱藏
+        setTimeout(() => {
+            box.classList.remove('opacity-100', 'scale-100');
+            box.classList.add('opacity-0', 'scale-95', 'pointer-events-none');
+        }, 3000);
+    }
+
+    /**
+     * 清空或重置結果顯示區域
+     */
+    function clearResults() {
+        document.getElementById('value').textContent = '0';
+        document.getElementById('rawCommission').textContent = '0';
+        document.getElementById('actualCommission').textContent = '0';
+        document.getElementById('totalCost').textContent = '0';
+    }
+
+
+    // --- 應用程式核心邏輯 ---
+
+    /**
+     * 載入使用者設定 (折扣和最低手續費)，並監聽變動
+     */
+    function loadSettings() {
+        const discountInput = document.getElementById('discount');
+        const minCommissionInput = document.getElementById('minCommission');
+
+        // --- 處理最低手續費 ---
+        const savedMinCommission = getCookie(MIN_COMMISSION_KEY);
+        if (savedMinCommission) {
+            minCommissionInput.value = savedMinCommission;
+        } else {
+            // 如果沒有 Cookie，使用預設值 20
+            minCommissionInput.value = "20"; 
+            setCookie(MIN_COMMISSION_KEY, "20", 30);
+        }
+
+        // 監聽最低手續費輸入框的變動，一有變動就儲存到 Cookie
+        minCommissionInput.addEventListener('input', (event) => {
+            const newMinCommission = event.target.value;
+            setCookie(MIN_COMMISSION_KEY, newMinCommission, 30);
+            calculateCost();
+        });
+
+
+        // --- 處理折扣率 ---
+        const savedDiscount = getCookie(DISCOUNT_KEY);
+        if (savedDiscount) {
+            discountInput.value = savedDiscount;
+        } else {
+            // 如果沒有 Cookie，使用預設值 0.28
+            discountInput.value = "0.28"; 
+            setCookie(DISCOUNT_KEY, "0.28", 30);
+        }
+
+        // 監聽折扣輸入框的變動，一有變動就儲存到 Cookie
+        discountInput.addEventListener('input', (event) => {
+            const newDiscount = event.target.value;
+            setCookie(DISCOUNT_KEY, newDiscount, 30);
+            calculateCost();
+        });
+    }
+
+    /**
+     * 股票買入成本計算邏輯
+     */
+    function calculateCost() {
+        // 獲取輸入值，並使用 || 確保即使清空輸入，變數值也不會是 NaN
+        const price = parseFloat(document.getElementById('price').value);
+        const shares = parseInt(document.getElementById('shares').value);
+        
+        // 固定手續費率 0.1425% (即 0.001425)
+        const FIXED_RATE = 0.001425; 
+        
+        // 如果輸入欄位被清空，min 預設為 0，discount 預設為 1.0 (無折扣)
+        // 注意：這裡取得的值是即時的輸入值，或為 Cookie 載入後的初始值
+        const min = parseFloat(document.getElementById('minCommission').value) || 0;
+        const discount = parseFloat(document.getElementById('discount').value) || 1.0; 
+
+        // 檢查主要輸入是否有效
+        if (isNaN(price) || isNaN(shares) || price <= 0 || shares <= 0) {
+             // 輸入無效時，清空顯示結果
+             clearResults(); 
+             
+             // 確保所有欄位都初始化後再顯示錯誤
+            if (document.readyState === 'complete') {
+                 showMessage('請輸入有效的股價和股數。', 'error');
+            }
+            return;
+        }
+
+        // 1. 股票價值
+        const stockValue = price * shares;
+
+        // 2. 原始手續費 (四捨五入到整數)
+        // 台灣法規規定原始手續費小數點以下四捨五入
+        const rawCommission = Math.round(stockValue * FIXED_RATE); 
+
+        // 3. 計算折扣後的手續費 (浮點數)
+        let discountedCommission = stockValue * FIXED_RATE * discount;
+
+        // 4. 實付手續費 (考慮最低手續費和無條件捨去)
+        let actualCommission = 0;
+        
+        if (shares >= 1000) {
+            // 【整股交易】:
+            // 計算實付手續費，需滿足 [無條件捨去] 且 [不低於最低手續費]
+            
+            // 1. 先將折扣後手續費無條件捨去
+            let flooredCommission = Math.floor(discountedCommission);
+            
+            // 2. 實付手續費為 捨去後的金額 與 最低手續費 兩者中的最大值
+            actualCommission = Math.max(flooredCommission, min);
+            
+        } else {
+            // 【零股交易】：通常無最低手續費限制
+            // 直接將折扣後的手續費不足整數部分採無條件捨去
+            actualCommission = Math.floor(discountedCommission);
+             // 註：零股交易通常沒有最低限制，但為了安全，保留 Math.floor
+        }
+        
+        // 5. 總成本
+        const totalCost = stockValue + actualCommission;
+
+        // 顯示結果
+        document.getElementById('value').textContent = stockValue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+        document.getElementById('rawCommission').textContent = rawCommission.toLocaleString('en-US');
+        document.getElementById('actualCommission').textContent = actualCommission.toLocaleString('en-US');
+        document.getElementById('totalCost').textContent = totalCost.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+
+
+    // --- PWA 註冊與初始化 ---
+
+    window.addEventListener('load', () => {
+        // 1. 載入並監聽設定 (取代 loadDiscount)
+        loadSettings(); 
+        // 2. 執行首次計算 (使用載入的設定值)
+        calculateCost();
+        
+        // 3. 註冊 Service Worker (PWA 核心)
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./service-worker.js')
+                .then(reg => console.log('Service Worker 註冊成功:', reg.scope))
+                .catch(err => console.log('Service Worker 註冊失敗:', err));
+        }
+    });
+
+</script>
+</body>
+</html>
         input[type=number] {
             -moz-appearance: textfield;
         }
