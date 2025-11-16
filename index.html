@@ -102,3 +102,187 @@
     <div id="message-box" class="fixed top-0 left-1/2 -translate-x-1/2 mt-4 transition-all duration-300 transform opacity-0 scale-95 pointer-events-none">
         <div id="message-content" class="bg-red-500 text-white p-3 rounded-lg shadow-xl font-bold"></div>
     </div>
+
+<script>
+    // --- Cookie 處理函數 ---
+    const DISCOUNT_KEY = 'commissionDiscount';
+
+    /**
+     * 設置 Cookie
+     */
+    function setCookie(name, value, days) {
+        const d = new Date();
+        d.setTime(d.getTime() + (days * 24 * 60 * 60 * 1000));
+        const expires = "expires=" + d.toUTCString();
+        // Path=/ ensures the cookie is available across the entire site
+        document.cookie = name + "=" + value + ";" + expires + ";path=/;SameSite=Lax";
+    }
+
+    /**
+     * 獲取 Cookie
+     */
+    function getCookie(name) {
+        const cname = name + "=";
+        const decodedCookie = decodeURIComponent(document.cookie);
+        const ca = decodedCookie.split(';');
+        for(let i = 0; i < ca.length; i++) {
+            let c = ca[i].trim();
+            if (c.indexOf(cname) == 0) {
+                return c.substring(cname.length, c.length);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 顯示訊息提示框 (取代 alert)
+     */
+    function showMessage(message, type = 'info') {
+        const box = document.getElementById('message-box');
+        const content = document.getElementById('message-content');
+        
+        content.textContent = message;
+        
+        // 根據類型設定樣式
+        content.className = 'p-3 rounded-lg shadow-xl font-bold';
+        if (type === 'error') {
+            content.classList.add('bg-red-600');
+        } else {
+            content.classList.add('bg-blue-600');
+        }
+
+        // 顯示訊息框
+        box.classList.remove('opacity-0', 'scale-95', 'pointer-events-none');
+        box.classList.add('opacity-100', 'scale-100');
+
+        // 3 秒後自動隱藏
+        setTimeout(() => {
+            box.classList.remove('opacity-100', 'scale-100');
+            box.classList.add('opacity-0', 'scale-95', 'pointer-events-none');
+        }, 3000);
+    }
+
+    /**
+     * 清空或重置結果顯示區域
+     */
+    function clearResults() {
+        document.getElementById('value').textContent = '0';
+        document.getElementById('rawCommission').textContent = '0';
+        document.getElementById('actualCommission').textContent = '0';
+        document.getElementById('totalCost').textContent = '0';
+    }
+
+
+    // --- 應用程式核心邏輯 ---
+
+    /**
+     * 載入手續費折扣，並監聽變動
+     */
+    function loadDiscount() {
+        const discountInput = document.getElementById('discount');
+        const savedDiscount = getCookie(DISCOUNT_KEY);
+
+        if (savedDiscount) {
+            // 如果 Cookie 存在，載入其值
+            discountInput.value = savedDiscount;
+        } else {
+            // 如果沒有 Cookie，使用預設值 0.28，並將其存入 Cookie
+            discountInput.value = "0.28"; 
+            setCookie(DISCOUNT_KEY, "0.28", 30);
+        }
+
+        // 監聽折扣輸入框的變動，一有變動就儲存到 Cookie
+        discountInput.addEventListener('change', (event) => {
+            const newDiscount = event.target.value;
+            setCookie(DISCOUNT_KEY, newDiscount, 30);
+            calculateCost();
+        });
+    }
+
+    /**
+     * 股票買入成本計算邏輯
+     */
+    function calculateCost() {
+        // 獲取輸入值，並使用 || 確保即使清空輸入，變數值也不會是 NaN
+        const price = parseFloat(document.getElementById('price').value);
+        const shares = parseInt(document.getElementById('shares').value);
+        
+        // 固定手續費率 0.1425% (即 0.001425)
+        const FIXED_RATE = 0.001425; 
+        
+        // 如果輸入欄位被清空，min 預設為 0，discount 預設為 1.0 (無折扣)
+        const min = parseFloat(document.getElementById('minCommission').value) || 0;
+        const discount = parseFloat(document.getElementById('discount').value) || 1.0; 
+
+        // 檢查主要輸入是否有效
+        if (isNaN(price) || isNaN(shares) || price <= 0 || shares <= 0) {
+             // 輸入無效時，清空顯示結果
+             clearResults(); 
+             
+             // 確保所有欄位都初始化後再顯示錯誤
+            if (document.readyState === 'complete') {
+                 showMessage('請輸入有效的股價和股數。', 'error');
+            }
+            return;
+        }
+
+        // 1. 股票價值
+        const stockValue = price * shares;
+
+        // 2. 原始手續費 (四捨五入到整數)
+        // 台灣法規規定原始手續費小數點以下四捨五入
+        const rawCommission = Math.round(stockValue * FIXED_RATE); 
+
+        // 3. 計算折扣後的手續費 (浮點數)
+        let discountedCommission = stockValue * FIXED_RATE * discount;
+
+        // 4. 實付手續費 (考慮最低手續費和無條件捨去)
+        let actualCommission = 0;
+        
+        if (shares >= 1000) {
+            // 【整股交易修正】:
+            // 計算實付手續費，需滿足 [無條件捨去] 且 [不低於最低手續費]
+            
+            // 1. 先將折扣後手續費無條件捨去
+            let flooredCommission = Math.floor(discountedCommission);
+            
+            // 2. 實付手續費為 捨去後的金額 與 最低手續費 兩者中的最大值
+            //    確保最終金額不會低於最低手續費 (min)
+            actualCommission = Math.max(flooredCommission, min);
+            
+        } else {
+            // 零股交易：通常無最低手續費限制
+            // 直接將折扣後的手續費不足整數部分採無條件捨去
+            actualCommission = Math.max(Math.floor(discountedCommission), min);
+        }
+        
+        // 5. 總成本
+        const totalCost = stockValue + actualCommission;
+
+        // 顯示結果
+        document.getElementById('value').textContent = stockValue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+        document.getElementById('rawCommission').textContent = rawCommission.toLocaleString('en-US');
+        document.getElementById('actualCommission').textContent = actualCommission.toLocaleString('en-US');
+        document.getElementById('totalCost').textContent = totalCost.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+
+
+    // --- PWA 註冊與初始化 ---
+
+    window.addEventListener('load', () => {
+        // 1. 載入並監聽折扣
+        loadDiscount(); 
+        // 2. 執行首次計算 (使用載入的折扣值)
+        calculateCost();
+        
+        // 3. 註冊 Service Worker (PWA 核心)
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('./service-worker.js')
+                .then(reg => console.log('Service Worker 註冊成功:', reg.scope))
+                .catch(err => console.log('Service Worker 註冊失敗:', err));
+        }
+    });
+
+</script>
+</body>
+</html>
