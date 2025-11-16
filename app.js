@@ -48,6 +48,12 @@ function loadDiscount() {
     // 如果 Cookie 存在，就載入它的值
     if (savedDiscount) {
         discountInput.value = savedDiscount;
+    } else {
+        // --- 新增 / 確認這個邏輯 ---
+        // 如果沒有 Cookie，則使用預設值 0.28
+        discountInput.value = "0.28"; 
+        // 第一次載入時，將預設值也存入 Cookie (可選，但推薦)
+        setCookie(DISCOUNT_KEY, "0.28", 30);
     }
 
     // 監聽折扣輸入框的變動，一有變動就儲存到 Cookie
