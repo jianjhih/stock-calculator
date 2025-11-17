@@ -196,8 +196,6 @@
             // 使用 toFixed(4) 來確保計算時的浮點數精度
             const increment = parseFloat((sellingPrice - price).toFixed(4));
             
-            // 更新 UI，所有數字輸出皆使用 .toFixed(2)
-            document.getElementById('displayPurchasePrice').textContent = price.toFixed(2);
             // 增量顯示為小數點後兩位
             document.getElementById('displayIncrement').textContent = (increment >= 0 ? '+' : '') + increment.toFixed(2);
             // 賣出價格顯示為小數點後兩位
