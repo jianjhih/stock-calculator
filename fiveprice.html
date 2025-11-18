@@ -79,13 +79,17 @@
     <!-- JavaScript 邏輯 -->
     <script>
         // !! IMPORTANT: 請務必替換成您部署的 Google Apps Script Web App 網址 !!
-        const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxT9AaZnTAgFmbCBLyA2rF430gjPhEzGSZ9IkmzOu6ma-hzV68-2u_Rx9Y8Ye0iJyrJrg/exec'; 
+        const GAS_WEB_APP_URL = 'YOUR_DEPLOYED_GAS_WEB_APP_URL'; 
 
         const statusMessage = document.getElementById('status-message');
         const fetchButton = document.getElementById('fetch-button');
         const regularQuotesDiv = document.getElementById('regular-quotes');
         const oddLotQuotesDiv = document.getElementById('odd-lot-quotes');
         const stockInput = document.getElementById('stock-id');
+
+        // 模擬的台積電 2330 數據 (用於預覽測試)
+        const MOCK_DATA_2330 = {"status":"success","stockId":"2330","rawRegular":{"msgArray":[{"@":"2330.tw","tv":"6996","ps":"7795","pid":"9.tse.tw|15029","pz":"1415.0000","bp":"0","fv":"111","oa":"1415.0000","ob":"1410.0000","m%":"000000","^":"20251118","key":"tse_2330.tw_20251118","a":"1410.0000_1415.0000_1420.0000_1425.0000_1430.0000_","b":"1405.0000_1400.0000_1395.0000_1390.0000_1385.0000_","c":"2330","#":"13.tse.tw|2075","d":"20251118","%":"14:30:00","ch":"2330.tw","tlong":"1763447400000","ot":"14:30:00","f":"222_858_1606_1880_499_","g":"664_5673_1747_800_348_","ip":"0","mt":"000000","ov":"138432","h":"1435.0000","i":"24","it":"12","oz":"1415.0000","l":"1405.0000","n":"台積電","o":"1435.0000","p":"0","ex":"tse","s":"6996","t":"13:30:00","u":"1585.0000","v":"41949","w":"1305.0000","nf":"台灣積體電路製造股份有限公司","y":"1445.0000","z":"1405.0000","ts":"0"}],"referer":"","userDelay":5000,"rtcode":"0000","queryTime":{"sysDate":"20251118","stockInfoItem":5069,"stockInfo":93,"sessionStr":"UserSession","sysTime":"22:41:08","showChart":false,"sessionFromTime":-1,"sessionLatestTime":-1},"rtmessage":"OK","exKey":"if_tse_2330.tw_zh-tw.null","cachedAlive":40164},"rawOddLot":{"msgArray":[{"@":"2330.tw","tt":"13:30:00","ps":"-","qm%":"866416","pz":"-","tm%":"000000","q%":"09:09:56","m%":"000000","qmt":"866416","tmt":"000000","key":"tse_2330.tw_20251118","^":"20251118","a":"1420.0000_1425.0000_1430.0000_1435.0000_1440.0000_","b":"1415.0000_1410.0000_1405.0000_1400.0000_1395.0000_","c":"2330","#":"23.tse.tw|844419","qt":"09:09:56","d":"20251118","%":"13:30:00","ch":"2330.tw","tlong":"1763443800000","f":"35873_95717_20328_10396_10901_","g":"11660_129942_590395_682365_90796_","ip":"0","mt":"000000","h":"1430.0000","i":"24","it":"12","l":"1405.0000","n":"台積電","o":"1430.0000","p":"0","t%":"13:30:00","ex":"tse","s":"291","t":"13:30:00","u":"1585.0000","v":"6205367","w":"1305.0000","nf":"台灣積體電路製造股份有限公司","y":"1445.0000","z":"1420.0000","ts":"0"}],"referer":"","userDelay":5000,"rtcode":"0000","queryTime":{"sysDate":"20251118","oddInfo":1,"oddInfoItem":707,"sessionStr":"UserSession","sysTime":"17:48:03","showChart":false,"sessionFromTime":-1,"sessionLatestTime":-1},"rtmessage":"OK","exKey":"if_tse_2330.tw_zh-tw.null","cachedAlive":17625620}};
+
 
         // 允許按下 Enter 鍵觸發查詢
         stockInput.addEventListener('keydown', (event) => {
@@ -104,7 +108,11 @@
                 return;
             }
 
-            if (GAS_WEB_APP_URL === 'YOUR_DEPLOYED_GAS_WEB_APP_URL') {
+            const useMockData = (GAS_WEB_APP_URL === 'YOUR_DEPLOYED_GAS_WEB_APP_URL' && stockId === '2330');
+
+            if (useMockData) {
+                displayMessage('偵測到未配置 GAS 網址，使用台積電 (2330) 模擬數據進行渲染。', 'text-orange-500');
+            } else if (GAS_WEB_APP_URL === 'YOUR_DEPLOYED_GAS_WEB_APP_URL') {
                 displayMessage('錯誤：請在 JavaScript 程式碼中設置 GAS_WEB_APP_URL！', 'text-red-500');
                 return;
             }
@@ -115,42 +123,51 @@
             regularQuotesDiv.innerHTML = '<div class="text-center py-4">載入中...</div>';
             oddLotQuotesDiv.innerHTML = '<div class="text-center py-4">載入中...</div>';
 
-            const url = `${GAS_WEB_APP_URL}?stockId=${stockId}`;
+            let data;
+            
+            if (useMockData) {
+                // 使用模擬數據
+                data = MOCK_DATA_2330;
+            } else {
+                // 進行網路請求
+                const url = `${GAS_WEB_APP_URL}?stockId=${stockId}`;
+                try {
+                    const response = await fetch(url);
+                    data = await response.json();
+                } catch (error) {
+                    console.error('連線錯誤:', error);
+                    displayMessage('連線錯誤，請檢查網路、GAS 網址或 CORS 設定。', 'text-red-500');
+                    regularQuotesDiv.innerHTML = '連線錯誤';
+                    oddLotQuotesDiv.innerHTML = '連線錯誤';
+                    fetchButton.disabled = false;
+                    return;
+                }
+            }
 
-            try {
-                const response = await fetch(url);
-                const data = await response.json();
 
-                if (data.status === 'success') {
-                    // 成功獲取資料，開始解析和渲染
-                    const regularInfo = data.rawRegular.msgArray && data.rawRegular.msgArray[0];
-                    const oddLotInfo = data.rawOddLot.msgArray && data.rawOddLot.msgArray[0];
-                    
-                    if (regularInfo && oddLotInfo) {
-                        displayMessage(`成功獲取 ${regularInfo.n || stockId} (${regularInfo.t || 'N/A'}) 的報價`, 'text-green-500');
-                        renderQuotes(regularInfo, 'regular', regularQuotesDiv);
-                        renderQuotes(oddLotInfo, 'oddLot', oddLotQuotesDiv);
-                    } else {
-                        displayMessage(`股票代碼 ${stockId} 無法獲取有效資料，請確認代碼是否正確或 API 狀態。`, 'text-orange-500');
-                        regularQuotesDiv.innerHTML = '查無資料';
-                        oddLotQuotesDiv.innerHTML = '查無資料';
-                    }
-
+            if (data.status === 'success') {
+                // 成功獲取資料，開始解析和渲染
+                const regularInfo = data.rawRegular.msgArray && data.rawRegular.msgArray[0];
+                const oddLotInfo = data.rawOddLot.msgArray && data.rawOddLot.msgArray[0];
+                
+                if (regularInfo && oddLotInfo) {
+                    displayMessage(`成功獲取 ${regularInfo.n || stockId} (${regularInfo.t || 'N/A'}) 的報價`, 'text-green-500');
+                    renderQuotes(regularInfo, 'regular', regularQuotesDiv);
+                    renderQuotes(oddLotInfo, 'oddLot', oddLotQuotesDiv);
                 } else {
-                    // GAS 返回錯誤 (e.g., stockId missing, internal error)
-                    displayMessage(`查詢失敗: ${data.message || '未知錯誤'}`, 'text-red-500');
-                    regularQuotesDiv.innerHTML = '查詢失敗';
-                    oddLotQuotesDiv.innerHTML = '查詢失敗';
+                    displayMessage(`股票代碼 ${stockId} 無法獲取有效資料，請確認代碼是否正確或 API 狀態。`, 'text-orange-500');
+                    regularQuotesDiv.innerHTML = '查無資料';
+                    oddLotQuotesDiv.innerHTML = '查無資料';
                 }
 
-            } catch (error) {
-                console.error('連線或解析錯誤:', error);
-                displayMessage('連線錯誤，請檢查網路、GAS 網址或 CORS 設定。', 'text-red-500');
-                regularQuotesDiv.innerHTML = '連線錯誤';
-                oddLotQuotesDiv.innerHTML = '連線錯誤';
-            } finally {
-                fetchButton.disabled = false;
+            } else {
+                // GAS 返回錯誤 (e.g., stockId missing, internal error)
+                displayMessage(`查詢失敗: ${data.message || '未知錯誤'}`, 'text-red-500');
+                regularQuotesDiv.innerHTML = '查詢失敗';
+                oddLotQuotesDiv.innerHTML = '查詢失敗';
             }
+
+            fetchButton.disabled = false;
         }
 
         /**
@@ -160,34 +177,39 @@
          * @param {HTMLElement} targetDiv 渲染目標 DOM 元素。
          */
         function renderQuotes(info, type, targetDiv) {
-            // 根據類型決定 API 欄位名稱
             const isRegular = type === 'regular';
+            
+            // **修正 TWSE API 欄位名稱**：
+            // 整股 (Regular) 使用 'b' (買價), 'g' (買量), 'a' (賣價), 'f' (賣量)
+            // 零股 (OddLot) 使用 'b5p' (買價), 'b5q' (買量), 's5p' (賣價), 's5q' (賣量)
             const [bpKey, bqKey, spKey, sqKey] = isRegular 
-                ? ['bp', 'bq', 'sp', 'sq']    // 整股
-                : ['b5p', 'b5q', 's5p', 's5q']; // 零股
+                ? ['b', 'g', 'a', 'f']    // **已修正**
+                : ['b5p', 'b5q', 's5p', 's5q']; 
 
-            // 解析逗號分隔的字串為陣列
-            const buyPrices = info[bpKey] ? info[bpKey].split(',') : [];
-            const buyQuantities = info[bqKey] ? info[bqKey].split(',') : [];
-            const sellPrices = info[spKey] ? info[spKey].split(',') : [];
-            const sellQuantities = info[sqKey] ? info[sqKey].split(',') : [];
+            // 解析分號分隔的字串為陣列
+            // 注意 TWSE API 價量字串尾部有底線 '_'，split 處理後最後一個元素會是空字串，需過濾
+            const buyPrices = info[bpKey] ? info[bpKey].split('_').filter(p => p) : [];
+            const buyQuantities = info[bqKey] ? info[bqKey].split('_').filter(q => q) : [];
+            const sellPrices = info[spKey] ? info[spKey].split('_').filter(p => p) : [];
+            const sellQuantities = info[sqKey] ? info[sqKey].split('_').filter(q => q) : [];
 
             const count = 5; // 五檔
 
             let html = `
                 <div class="mb-4 text-sm font-medium">
                     <p><strong>股票名稱:</strong> ${info.n || 'N/A'}</p>
-                    <p><strong>最新成交:</strong> <span class="${info.z > info.y ? 'buy-price' : (info.z < info.y ? 'sell-price' : 'text-gray-600')}">${info.z || '--'}</span></p>
+                    <p><strong>最新成交價 (Z):</strong> <span class="${info.z > info.y ? 'buy-price' : (info.z < info.y ? 'sell-price' : 'text-gray-600')}">${info.z || '--'}</span></p>
+                    <p><strong>昨日收盤價 (Y):</strong> ${info.y || '--'}</p>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="quote-table w-full border border-gray-200 rounded-lg">
                         <thead>
                             <tr>
                                 <th class="rounded-tl-lg">檔位</th>
-                                <th>買價</th>
-                                <th>買量</th>
-                                <th>賣價</th>
-                                <th>賣量</th>
+                                <th class="buy-price">買價</th>
+                                <th class="buy-price">買量</th>
+                                <th class="sell-price">賣價</th>
+                                <th class="sell-price">賣量</th>
                                 <th class="rounded-tr-lg"></th>
                             </tr>
                         </thead>
@@ -254,9 +276,9 @@
         // 初始化提示
         window.onload = () => {
              if (GAS_WEB_APP_URL === 'YOUR_DEPLOYED_GAS_WEB_APP_URL') {
-                displayMessage('請先在程式碼中設定 GAS_WEB_APP_URL！', 'text-red-500 font-bold');
+                displayMessage('請輸入股號 (e.g., 2330) 進行查詢，未配置 GAS 網址時 2330 將使用模擬數據。', 'text-gray-500');
             } else {
-                displayMessage('請輸入股號 (e.g., 2330) 進行查詢。', 'text-gray-500');
+                displayMessage('請輸入股號進行查詢。', 'text-gray-500');
             }
         };
 
