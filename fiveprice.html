@@ -79,7 +79,7 @@
     <!-- JavaScript 邏輯 -->
     <script>
         // !! IMPORTANT: 請務必替換成您部署的 Google Apps Script Web App 網址 !!
-        const GAS_WEB_APP_URL = 'YOUR_DEPLOYED_GAS_WEB_APP_URL'; 
+        const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxT9AaZnTAgFmbCBLyA2rF430gjPhEzGSZ9IkmzOu6ma-hzV68-2u_Rx9Y8Ye0iJyrJrg/exec'; 
 
         const statusMessage = document.getElementById('status-message');
         const fetchButton = document.getElementById('fetch-button');
@@ -108,14 +108,12 @@
                 return;
             }
 
-            const useMockData = (GAS_WEB_APP_URL === 'YOUR_DEPLOYED_GAS_WEB_APP_URL' && stockId === '2330');
+            // 設置為 false，因為現在有實際的 GAS 網址了
+            const useMockData = (false && stockId === '2330'); 
 
             if (useMockData) {
                 displayMessage('偵測到未配置 GAS 網址，使用台積電 (2330) 模擬數據進行渲染。', 'text-orange-500');
-            } else if (GAS_WEB_APP_URL === 'YOUR_DEPLOYED_GAS_WEB_APP_URL') {
-                displayMessage('錯誤：請在 JavaScript 程式碼中設置 GAS_WEB_APP_URL！', 'text-red-500');
-                return;
-            }
+            } 
 
             // 設置載入狀態
             displayMessage('正在查詢 ' + stockId + ' 的即時資料...', 'text-blue-500');
@@ -136,7 +134,7 @@
                     data = await response.json();
                 } catch (error) {
                     console.error('連線錯誤:', error);
-                    displayMessage('連線錯誤，請檢查網路、GAS 網址或 CORS 設定。', 'text-red-500');
+                    displayMessage('連線錯誤，請檢查網路或 GAS 服務是否正常運行。', 'text-red-500');
                     regularQuotesDiv.innerHTML = '連線錯誤';
                     oddLotQuotesDiv.innerHTML = '連線錯誤';
                     fetchButton.disabled = false;
@@ -179,11 +177,11 @@
         function renderQuotes(info, type, targetDiv) {
             const isRegular = type === 'regular';
             
-            // **修正 TWSE API 欄位名稱**：
+            // **TWSE API 欄位名稱**：
             // 整股 (Regular) 使用 'b' (買價), 'g' (買量), 'a' (賣價), 'f' (賣量)
             // 零股 (OddLot) 使用 'b5p' (買價), 'b5q' (買量), 's5p' (賣價), 's5q' (賣量)
             const [bpKey, bqKey, spKey, sqKey] = isRegular 
-                ? ['b', 'g', 'a', 'f']    // **已修正**
+                ? ['b', 'g', 'a', 'f'] 
                 : ['b5p', 'b5q', 's5p', 's5q']; 
 
             // 解析分號分隔的字串為陣列
@@ -275,11 +273,7 @@
 
         // 初始化提示
         window.onload = () => {
-             if (GAS_WEB_APP_URL === 'YOUR_DEPLOYED_GAS_WEB_APP_URL') {
-                displayMessage('請輸入股號 (e.g., 2330) 進行查詢，未配置 GAS 網址時 2330 將使用模擬數據。', 'text-gray-500');
-            } else {
-                displayMessage('請輸入股號進行查詢。', 'text-gray-500');
-            }
+             displayMessage('GAS 網址已配置。請輸入股號 (e.g., 2330) 進行查詢。', 'text-gray-500');
         };
 
     </script>
