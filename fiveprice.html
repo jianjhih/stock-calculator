@@ -12,16 +12,18 @@
             font-family: 'Inter', sans-serif;
         }
         /* 基礎樣式 */
+        .quote-table {
+            border-collapse: collapse; /* 確保表格邊框美觀 */
+        }
         .quote-table th, .quote-table td {
             padding: 8px 4px;
             text-align: center;
+            font-weight: bold; /* 讓價格和數量更加突出 */
         }
-        .quote-table th {
-            background-color: #f3f4f6;
+        .quote-table thead th {
+            background-color: #e5e7eb; /* 更淺的表頭背景 */
             font-weight: 600;
         }
-        .buy-price { color: #dc2626; font-weight: bold; } /* 紅色 (漲) */
-        .sell-price { color: #16a34a; font-weight: bold; } /* 綠色 (跌) */
         
         /* 響應式表格排版 (手機上更緊湊) */
         @media (max-width: 640px) {
@@ -30,6 +32,26 @@
                 font-size: 0.85rem;
             }
         }
+        
+        /* 隱藏右側表格的左邊框 */
+        #odd-lot-quotes-section .quote-table {
+            border-left: none;
+        }
+        
+        /* 僅高亮顯示與成交價相同的單一價格儲存格 - 使用紅色邊框標註 */
+        .highlight-cell {
+            border: 2px solid #ef4444; /* Tailwind red-500 */
+            border-radius: 6px; /* 增加圓角讓標註更柔和 */
+            background-color: #fef2f2; /* 輕微的紅色背景來襯托邊框 */
+            box-shadow: 0 0 5px rgba(239, 68, 68, 0.5);
+            /* 需要調整 padding 以適應邊框 */
+            padding: 6px 2px !important;
+        }
+
+        /* 價格顏色類別 (由 JS 動態應用) */
+        .text-red-600 { color: #dc2626; } /* 紅色 (漲) */
+        .text-green-600 { color: #16a34a; } /* 綠色 (跌) */
+        .text-gray-900 { color: #1f2937; } /* 黑色 (平) */
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen p-4 sm:p-8">
@@ -61,17 +83,16 @@
         <div id="status-message" class="text-center text-sm text-gray-500 mb-6 h-4"></div>
         
         <!-- 報價結果容器 -->
-        <div id="quotes-container" class="space-y-8">
-            <!-- 整股報價區 -->
-            <div id="regular-container" class="border p-4 rounded-lg bg-red-50/50 shadow-sm">
-                <h2 class="text-xl font-semibold text-gray-700 mb-3">整股報價 (單位: 張)</h2>
-                <div id="regular-quotes">請輸入股號並點擊查詢。</div>
-            </div>
-
-            <!-- 零股報價區 -->
-            <div id="odd-lot-container" class="border p-4 rounded-lg bg-green-50/50 shadow-sm">
-                <h2 class="text-xl font-semibold text-gray-700 mb-3">零股報價 (單位: 股)</h2>
-                <div id="odd-lot-quotes">請輸入股號並點擊查詢。</div>
+        <div id="quotes-container">
+            <!-- 綜合報價區 -->
+            <div id="combined-quotes-display" class="p-4 rounded-xl bg-gray-50 shadow-inner">
+                <div id="stock-info-header" class="mb-4"></div>
+                <div id="combined-tables" class="flex flex-col lg:flex-row gap-6">
+                    <!-- Left: Regular Quotes -->
+                    <div id="regular-quotes-section" class="flex-1">請輸入股號並點擊查詢。</div>
+                    <!-- Right: Odd Lot Quotes -->
+                    <div id="odd-lot-quotes-section" class="flex-1"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -83,12 +104,85 @@
 
         const statusMessage = document.getElementById('status-message');
         const fetchButton = document.getElementById('fetch-button');
-        const regularQuotesDiv = document.getElementById('regular-quotes');
-        const oddLotQuotesDiv = document.getElementById('odd-lot-quotes');
         const stockInput = document.getElementById('stock-id');
+        
+        // 新增的 DOM 元素選擇器
+        const stockInfoHeader = document.getElementById('stock-info-header');
+        const regularQuotesSection = document.getElementById('regular-quotes-section');
+        const oddLotQuotesSection = document.getElementById('odd-lot-quotes-section');
 
-        // 模擬的台積電 2330 數據 (用於預覽測試)
-        const MOCK_DATA_2330 = {"status":"success","stockId":"2330","rawRegular":{"msgArray":[{"@":"2330.tw","tv":"6996","ps":"7795","pid":"9.tse.tw|15029","pz":"1415.0000","bp":"0","fv":"111","oa":"1415.0000","ob":"1410.0000","m%":"000000","^":"20251118","key":"tse_2330.tw_20251118","a":"1410.0000_1415.0000_1420.0000_1425.0000_1430.0000_","b":"1405.0000_1400.0000_1395.0000_1390.0000_1385.0000_","c":"2330","#":"13.tse.tw|2075","d":"20251118","%":"14:30:00","ch":"2330.tw","tlong":"1763447400000","ot":"14:30:00","f":"222_858_1606_1880_499_","g":"664_5673_1747_800_348_","ip":"0","mt":"000000","ov":"138432","h":"1435.0000","i":"24","it":"12","oz":"1415.0000","l":"1405.0000","n":"台積電","o":"1435.0000","p":"0","ex":"tse","s":"6996","t":"13:30:00","u":"1585.0000","v":"41949","w":"1305.0000","nf":"台灣積體電路製造股份有限公司","y":"1445.0000","z":"1405.0000","ts":"0"}],"referer":"","userDelay":5000,"rtcode":"0000","queryTime":{"sysDate":"20251118","stockInfoItem":5069,"stockInfo":93,"sessionStr":"UserSession","sysTime":"22:41:08","showChart":false,"sessionFromTime":-1,"sessionLatestTime":-1},"rtmessage":"OK","exKey":"if_tse_2330.tw_zh-tw.null","cachedAlive":40164},"rawOddLot":{"msgArray":[{"@":"2330.tw","tt":"13:30:00","ps":"-","qm%":"866416","pz":"-","tm%":"000000","q%":"09:09:56","m%":"000000","qmt":"866416","tmt":"000000","key":"tse_2330.tw_20251118","^":"20251118","a":"1420.0000_1425.0000_1430.0000_1435.0000_1440.0000_","b":"1415.0000_1410.0000_1405.0000_1400.0000_1395.0000_","c":"2330","#":"23.tse.tw|844419","qt":"09:09:56","d":"20251118","%":"13:30:00","ch":"2330.tw","tlong":"1763443800000","f":"35873_95717_20328_10396_10901_","g":"11660_129942_590395_682365_90796_","ip":"0","mt":"000000","h":"1430.0000","i":"24","it":"12","l":"1405.0000","n":"台積電","o":"1430.0000","p":"0","t%":"13:30:00","ex":"tse","s":"291","t":"13:30:00","u":"1585.0000","v":"6205367","w":"1305.0000","nf":"台灣積體電路製造股份有限公司","y":"1445.0000","z":"1420.0000","ts":"0"}],"referer":"","userDelay":5000,"rtcode":"0000","queryTime":{"sysDate":"20251118","oddInfo":1,"oddInfoItem":707,"sessionStr":"UserSession","sysTime":"17:48:03","showChart":false,"sessionFromTime":-1,"sessionLatestTime":-1},"rtmessage":"OK","exKey":"if_tse_2330.tw_zh-tw.null","cachedAlive":17625620}};
+
+        // 模擬的台積電 2330 數據 (用於預覽測試) - 已更新為用戶提供的最新資料
+        const MOCK_DATA_2330 = {
+            "status": "success",
+            "stockId": "2330",
+            "rawRegular": {
+                "msgArray": [
+                    {
+                        "@": "2330.tw", "tv": "6996", "ps": "7795", "pid": "9.tse.tw|15029", "pz": "1415.0000", "bp": "0", "fv": "111", "oa": "1415.0000", "ob": "1410.0000", "m%": "000000", "^": "20251118", "key": "tse_2330.tw_20251118",
+                        "a": "1410.0000_1415.0000_1420.0000_1425.0000_1430.0000_", // 賣價 (Sell Prices)
+                        "b": "1405.0000_1400.0000_1395.0000_1390.0000_1385.0000_", // 買價 (Buy Prices)
+                        "c": "2330", "#": "13.tse.tw|2075", "d": "20251118", "%": "14:30:00", "ch": "2330.tw", "tlong": "1763447400000", "ot": "14:30:00", 
+                        "f": "222_858_1606_1880_499_", // 賣量 (Sell Quantities)
+                        "g": "664_5673_1747_800_348_", // 買量 (Buy Quantities)
+                        "ip": "0", "mt": "000000", "ov": "138432", "h": "1435.0000", "i": "24", "it": "12", "oz": "1415.0000", "l": "1405.0000", "n": "台積電", "o": "1435.0000", "p": "0", "ex": "tse", "s": "6996", "t": "13:30:00", "u": "1585.0000", "v": "41949", "w": "1305.0000", "nf": "台灣積體電路製造股份有限公司", "y": "1445.0000", "z": "1405.0000", "ts": "0" // 整股成交價 1405.0000, 昨日收盤價 1445.0000
+                    }
+                ],
+                "referer": "", "userDelay": 5000, "rtcode": "0000", "queryTime": { "sysDate": "20251118", "stockInfoItem": 5069, "stockInfo": 93, "sessionStr": "UserSession", "sysTime": "22:41:08", "showChart": false, "sessionFromTime": -1, "sessionLatestTime": -1 }, "rtmessage": "OK", "exKey": "if_tse_2330.tw_zh-tw.null", "cachedAlive": 40164
+            },
+            "rawOddLot": {
+                "msgArray": [
+                    {
+                        "@": "2330.tw", "tt": "13:30:00", "ps": "-", "qm%": "866416", "pz": "-", "tm%": "000000", "q%": "09:09:56", "m%": "000000", "qmt": "866416", "tmt": "000000", "key": "tse_2330.tw_20251118", "^": "20251118",
+                        // 零股的五檔價量欄位在 TWSE API 中預期是 b5p/b5q/s5p/s5q，但用戶提供的 rawOddLot 只有 a/b/f/g。
+                        "a": "1420.0000_1425.0000_1430.0000_1435.0000_1440.0000_", // 賣價 (Sell Prices)
+                        "b": "1415.0000_1410.0000_1405.0000_1400.0000_1395.0000_", // 買價 (Buy Prices)
+                        "c": "2330", "#": "23.tse.tw|844419", "qt": "09:09:56", "d": "20251118", "%": "13:30:00", "ch": "2330.tw", "tlong": "1763443800000", 
+                        "f": "35873_95717_20328_10396_10901_", // 賣量 (Sell Quantities)
+                        "g": "11660_129942_590395_682365_90796_", // 買量 (Buy Quantities)
+                        "ip": "0", "mt": "000000", "h": "1430.0000", "i": "24", "it": "12", "l": "1405.0000", "n": "台積電", "o": "1430.0000", "p": "0", "t%": "13:30:00", "ex": "tse", "s": "291", "t": "13:30:00", "u": "1585.0000", "v": "6205367", "w": "1305.0000", "nf": "台灣積體電路製造股份有限公司", "y": "1445.0000", "z": "1420.0000", "ts": "0" // 零股成交價 1420.0000, 昨日收盤價 1445.0000
+                    }
+                ],
+                "referer": "", "userDelay": 5000, "rtcode": "0000", "queryTime": { "sysDate": "20251118", "oddInfo": 1, "oddInfoItem": 707, "sessionStr": "UserSession", "sysTime": "17:48:03", "showChart": false, "sessionFromTime": -1, "sessionLatestTime": -1 }, "rtmessage": "OK", "exKey": "if_tse_2330.tw_zh-tw.null", "cachedAlive": 17625620
+            }
+        };
+
+        /**
+         * 將價格格式化為小數點後兩位 (若為無效值則返回 '--')
+         * @param {string | number} price 價格字串或數字。
+         * @returns {string} 格式化後的價格字串或 '--'。
+         */
+        const formatPrice = (price) => {
+            if (price === null || price === undefined || price === '--' || price === '') return '--';
+            const p = parseFloat(price);
+            return isNaN(p) ? '--' : p.toFixed(2);
+        };
+
+        /**
+         * 根據價格與昨日收盤價的關係，返回對應的 Tailwind 顏色類別。
+         * 規則：高於Y=紅，低於Y=綠，等於Y=黑。
+         * @param {string | number} price 當前價格。
+         * @param {string | number} yesterdayClosePrice 昨日收盤價 (Y)。
+         * @returns {string} Tailwind 顏色類別 (text-red-600, text-green-600, text-gray-900)。
+         */
+        const determinePriceClass = (price, yesterdayClosePrice) => {
+            // 如果價格或參考價無效，使用灰色
+            if (!price || !yesterdayClosePrice) return 'text-gray-600';
+
+            const p = parseFloat(price);
+            const rp = parseFloat(yesterdayClosePrice);
+            
+            // 確保是有效的數字
+            if (isNaN(p) || isNaN(rp)) return 'text-gray-600';
+
+            if (p > rp) {
+                return 'text-red-600'; // Higher than Y -> Red (漲)
+            } else if (p < rp) {
+                return 'text-green-600'; // Lower than Y -> Green (跌)
+            } else {
+                return 'text-gray-900'; // Equal to Y -> Black (平)
+            }
+        };
 
 
         // 允許按下 Enter 鍵觸發查詢
@@ -109,17 +203,26 @@
             }
 
             // 設置為 false，因為現在有實際的 GAS 網址了
-            const useMockData = (false && stockId === '2330'); 
+            let useMockData = (false && stockId === '2330'); 
 
+            // 如果使用者查詢 2330，且 GAS 網址尚未配置（或被誤刪），則使用模擬數據
+            if (GAS_WEB_APP_URL.includes('YOUR_DEPLOYED_GAS_WEB_APP_URL') && stockId === '2330') {
+                 useMockData = true; 
+            }
+            
             if (useMockData) {
-                displayMessage('偵測到未配置 GAS 網址，使用台積電 (2330) 模擬數據進行渲染。', 'text-orange-500');
+                displayMessage('偵測到使用模擬數據 (2330)。', 'text-orange-500');
             } 
 
             // 設置載入狀態
             displayMessage('正在查詢 ' + stockId + ' 的即時資料...', 'text-blue-500');
             fetchButton.disabled = true;
-            regularQuotesDiv.innerHTML = '<div class="text-center py-4">載入中...</div>';
-            oddLotQuotesDiv.innerHTML = '<div class="text-center py-4">載入中...</div>';
+            
+            // 清空並設置載入提示
+            stockInfoHeader.innerHTML = '';
+            regularQuotesSection.innerHTML = '<div class="text-center py-4 text-gray-400">整股載入中...</div>';
+            oddLotQuotesSection.innerHTML = '<div class="text-center py-4 text-gray-400">零股載入中...</div>';
+
 
             let data;
             
@@ -131,12 +234,15 @@
                 const url = `${GAS_WEB_APP_URL}?stockId=${stockId}`;
                 try {
                     const response = await fetch(url);
+                    if (!response.ok) {
+                        throw new Error(`HTTP Error: ${response.status}`);
+                    }
                     data = await response.json();
                 } catch (error) {
                     console.error('連線錯誤:', error);
-                    displayMessage('連線錯誤，請檢查網路或 GAS 服務是否正常運行。', 'text-red-500');
-                    regularQuotesDiv.innerHTML = '連線錯誤';
-                    oddLotQuotesDiv.innerHTML = '連線錯誤';
+                    displayMessage('連線錯誤或 GAS 服務返回無效回應，請檢查服務是否正常運行。', 'text-red-500');
+                    regularQuotesSection.innerHTML = '連線錯誤';
+                    oddLotQuotesSection.innerHTML = '連線錯誤';
                     fetchButton.disabled = false;
                     return;
                 }
@@ -144,87 +250,195 @@
 
 
             if (data.status === 'success') {
-                // 成功獲取資料，開始解析和渲染
                 const regularInfo = data.rawRegular.msgArray && data.rawRegular.msgArray[0];
                 const oddLotInfo = data.rawOddLot.msgArray && data.rawOddLot.msgArray[0];
                 
-                if (regularInfo && oddLotInfo) {
-                    displayMessage(`成功獲取 ${regularInfo.n || stockId} (${regularInfo.t || 'N/A'}) 的報價`, 'text-green-500');
-                    renderQuotes(regularInfo, 'regular', regularQuotesDiv);
-                    renderQuotes(oddLotInfo, 'oddLot', oddLotQuotesDiv);
+                // 優先使用整股資訊作為主要顯示資訊
+                const mainInfo = regularInfo || oddLotInfo;
+
+                if (mainInfo) {
+                    displayMessage(`成功獲取 ${mainInfo.n || stockId} 的報價`, 'text-green-500');
+                    // 傳遞整股和零股資訊給標頭渲染函式
+                    renderStockHeader(regularInfo, oddLotInfo, stockId, stockInfoHeader);
                 } else {
                     displayMessage(`股票代碼 ${stockId} 無法獲取有效資料，請確認代碼是否正確或 API 狀態。`, 'text-orange-500');
-                    regularQuotesDiv.innerHTML = '查無資料';
-                    oddLotQuotesDiv.innerHTML = '查無資料';
+                    stockInfoHeader.innerHTML = `<h2 class="text-xl text-center text-red-500">查無 ${stockId} 資料</h2>`;
+                }
+
+                if (regularInfo) {
+                    renderQuoteTable(regularInfo, 'regular', regularQuotesSection);
+                } else {
+                    regularQuotesSection.innerHTML = '<div class="text-center py-4 text-gray-500">整股查無資料</div>';
+                }
+
+                if (oddLotInfo) {
+                     renderQuoteTable(oddLotInfo, 'oddLot', oddLotQuotesSection);
+                } else {
+                    oddLotQuotesSection.innerHTML = '<div class="text-center py-4 text-gray-500">零股查無資料</div>';
                 }
 
             } else {
-                // GAS 返回錯誤 (e.g., stockId missing, internal error)
                 displayMessage(`查詢失敗: ${data.message || '未知錯誤'}`, 'text-red-500');
-                regularQuotesDiv.innerHTML = '查詢失敗';
-                oddLotQuotesDiv.innerHTML = '查詢失敗';
+                stockInfoHeader.innerHTML = '';
+                regularQuotesSection.innerHTML = '查詢失敗';
+                oddLotQuotesSection.innerHTML = '查詢失敗';
             }
 
             fetchButton.disabled = false;
         }
+        
+        /**
+         * 渲染股票標頭資訊 (名稱, 最新價, 昨日收盤價)。
+         * @param {Object} regularInfo 整股 TWSE API 返回的 msgArray[0] 物件。
+         * @param {Object} oddLotInfo 零股 TWSE API 返回的 msgArray[0] 物件。
+         * @param {string} stockId 股票代碼。
+         * @param {HTMLElement} targetDiv 渲染目標 DOM 元素。
+         */
+        function renderStockHeader(regularInfo, oddLotInfo, stockId, targetDiv) {
+            const mainInfo = regularInfo || oddLotInfo;
+
+            if (!mainInfo) {
+                targetDiv.innerHTML = `<p class="text-red-500 text-center">無法獲取 ${stockId} 的基本資訊。</p>`;
+                return;
+            }
+            
+            // 獲取原始價格 (用於 determinePriceClass 比較)
+            const regZRaw = regularInfo?.z;
+            const regYRaw = regularInfo?.y || oddLotInfo?.y; 
+            const oddZRaw = oddLotInfo?.z;
+
+            // 根據昨日收盤價決定最新成交價的顏色 (使用原始價格進行準確比較)
+            const regPriceClass = determinePriceClass(regZRaw, regYRaw);
+            const oddPriceClass = determinePriceClass(oddZRaw, regYRaw);
+            
+            // 格式化價格為小數點後兩位 (用於顯示)
+            const regZ = formatPrice(regZRaw);
+            const regY = formatPrice(regYRaw);
+            const oddZ = formatPrice(oddZRaw);
+            
+            // 1. Stock Name and ID
+            let html = `
+                <div class="mb-4 text-center border-b pb-4">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-3">
+                        ${mainInfo.n || stockId} (${mainInfo.c || stockId})
+                    </h2>
+                    <div class="flex justify-center flex-wrap space-x-6 sm:space-x-8 items-end">
+            `;
+
+            // 2. Regular Price
+            html += `
+                <div class="flex flex-col items-center min-w-[120px] p-2 bg-white rounded-lg shadow-sm border border-gray-100">
+                    <span class="text-sm text-gray-500 font-medium whitespace-nowrap">整股成交價 (Z)</span>
+                    <span class="text-3xl ${regPriceClass} font-extrabold mt-1">
+                        ${regZ}
+                    </span>
+                </div>
+            `;
+            
+            // 3. Separator (Vertical Line) - 在大螢幕上顯示
+            html += `<div class="h-10 w-px bg-gray-300 self-center hidden sm:block"></div>`;
+
+
+            // 4. Odd Lot Price
+            html += `
+                <div class="flex flex-col items-center min-w-[120px] p-2 bg-white rounded-lg shadow-sm border border-gray-100">
+                    <span class="text-sm text-gray-500 font-medium whitespace-nowrap">零股成交價 (Z)</span>
+                    <span class="text-3xl ${oddPriceClass} font-extrabold mt-1">
+                        ${oddZ}
+                    </span>
+                </div>
+            `;
+
+            html += `
+                    </div> <!-- end flex justify-center -->
+                    ${regY !== '--' ? `<p class="text-sm text-gray-500 mt-4">昨日收盤價 (Y): ${regY}</p>` : ''}
+                </div>
+            `;
+
+            targetDiv.innerHTML = html;
+        }
+
 
         /**
-         * 渲染五檔價量表格。
+         * 渲染單一類型 (整股或零股) 的五檔價量表格。
          * @param {Object} info TWSE API 返回的 msgArray[0] 物件。
          * @param {string} type 'regular' 或 'oddLot'。
          * @param {HTMLElement} targetDiv 渲染目標 DOM 元素。
          */
-        function renderQuotes(info, type, targetDiv) {
+        function renderQuoteTable(info, type, targetDiv) {
             const isRegular = type === 'regular';
-            
-            // **TWSE API 欄位名稱**：
-            // 整股 (Regular) 使用 'b' (買價), 'g' (買量), 'a' (賣價), 'f' (賣量)
-            // 零股 (OddLot) 使用 'b5p' (買價), 'b5q' (買量), 's5p' (賣價), 's5q' (賣量)
-            const [bpKey, bqKey, spKey, sqKey] = isRegular 
-                ? ['b', 'g', 'a', 'f'] 
-                : ['b5p', 'b5q', 's5p', 's5q']; 
+            const lastTradePrice = info.z; // 最新成交價
+            const yesterdayClosePrice = info.y; // 昨日收盤價
 
-            // 解析分號分隔的字串為陣列
-            // 注意 TWSE API 價量字串尾部有底線 '_'，split 處理後最後一個元素會是空字串，需過濾
-            const buyPrices = info[bpKey] ? info[bpKey].split('_').filter(p => p) : [];
+            let bpKey, bqKey, spKey, sqKey;
+
+            if (isRegular) {
+                // 整股 (Regular): b (買價), g (買量), a (賣價), f (賣量)
+                bpKey = 'b'; bqKey = 'g'; spKey = 'a'; sqKey = 'f';
+            } else {
+                // 零股 (OddLot): 使用 TWSE 零股欄位 (b5p/b5q/s5p/s5q) 或 fallback (a/b/f/g)
+                if (info['b5p']) {
+                    bpKey = 'b5p'; bqKey = 'b5q'; spKey = 's5p'; sqKey = 's5q';
+                } else {
+                    bpKey = 'b'; bqKey = 'g'; spKey = 'a'; sqKey = 'f';
+                }
+            }
+
+
+            // 解析分號分隔的字串為陣列，並確保固定小數點位數進行精確比對
+            const buyPrices = info[bpKey] ? info[bpKey].split('_').filter(p => p).map(p => parseFloat(p).toFixed(2)) : [];
             const buyQuantities = info[bqKey] ? info[bqKey].split('_').filter(q => q) : [];
-            const sellPrices = info[spKey] ? info[spKey].split('_').filter(p => p) : [];
+            const sellPrices = info[spKey] ? info[spKey].split('_').filter(p => p).map(p => parseFloat(p).toFixed(2)) : [];
             const sellQuantities = info[sqKey] ? info[sqKey].split('_').filter(q => q) : [];
 
             const count = 5; // 五檔
 
             let html = `
-                <div class="mb-4 text-sm font-medium">
-                    <p><strong>股票名稱:</strong> ${info.n || 'N/A'}</p>
-                    <p><strong>最新成交價 (Z):</strong> <span class="${info.z > info.y ? 'buy-price' : (info.z < info.y ? 'sell-price' : 'text-gray-600')}">${info.z || '--'}</span></p>
-                    <p><strong>昨日收盤價 (Y):</strong> ${info.y || '--'}</p>
-                </div>
-                <div class="overflow-x-auto">
-                    <table class="quote-table w-full border border-gray-200 rounded-lg">
+                <h3 class="text-lg font-semibold text-gray-700 mb-3 p-2 rounded-t-lg text-center ${isRegular ? 'bg-red-200/50' : 'bg-green-200/50'}">
+                    ${isRegular ? '整股報價 (單位: 張)' : '零股報價 (單位: 股)'}
+                </h3>
+                <div class="overflow-x-auto border border-gray-200 rounded-b-lg shadow-md">
+                    <table class="quote-table w-full">
                         <thead>
                             <tr>
-                                <th class="rounded-tl-lg">檔位</th>
-                                <th class="buy-price">買價</th>
-                                <th class="buy-price">買量</th>
-                                <th class="sell-price">賣價</th>
-                                <th class="sell-price">賣量</th>
-                                <th class="rounded-tr-lg"></th>
+                                <th class="text-gray-900">買價</th>
+                                <th class="text-gray-900">買量</th>
+                                <th class="text-gray-900">賣價</th>
+                                <th class="text-gray-900">賣量</th>
                             </tr>
                         </thead>
                         <tbody>
             `;
             
+            // 將最新的成交價轉換為固定小數位數的字串進行比對
+            const tradePriceStr = parseFloat(lastTradePrice).toFixed(2);
+            
+            // 將字體大小統一設置為 text-sm
+            const priceSizeClass = 'text-sm'; 
+
             for (let i = 0; i < count; i++) {
-                const priceClass = isRegular ? 'text-sm' : 'text-xs';
+                // const priceSizeClass = isRegular ? 'text-sm' : 'text-xs'; <-- 舊程式碼
+                
+                const currentBuyPrice = buyPrices[i];
+                const currentSellPrice = sellPrices[i];
+                
+                // 決定價格和數量的顏色類別
+                const buyPriceColorClass = determinePriceClass(currentBuyPrice, yesterdayClosePrice);
+                const sellPriceColorClass = determinePriceClass(currentSellPrice, yesterdayClosePrice);
+
+                // 檢查買價或賣價是否等於最新成交價 (用於紅色邊框標註)
+                const isBuyPriceHighlight = currentBuyPrice && currentBuyPrice === tradePriceStr;
+                const isSellPriceHighlight = currentSellPrice && currentSellPrice === tradePriceStr;
+                
+                // 行樣式 (只保留 hover 效果)
+                const rowClass = 'hover:bg-gray-100/70';
 
                 html += `
-                    <tr class="hover:bg-gray-100/70 transition">
-                        <td>${i + 1}</td>
-                        <td class="buy-price ${priceClass}">${buyPrices[i] || '--'}</td>
-                        <td class="buy-price ${priceClass}">${formatQuantity(buyQuantities, i, isRegular)}</td>
-                        <td class="sell-price ${priceClass}">${sellPrices[i] || '--'}</td>
-                        <td class="sell-price ${priceClass}">${formatQuantity(sellQuantities, i, isRegular)}</td>
-                        <td></td>
+                    <tr class="${rowClass} transition">
+                        <td class="${buyPriceColorClass} ${priceSizeClass} ${isBuyPriceHighlight ? 'highlight-cell' : ''}">${currentBuyPrice || '--'}</td>
+                        <td class="${buyPriceColorClass} ${priceSizeClass}">${formatQuantity(buyQuantities, i, isRegular)}</td>
+                        <td class="${sellPriceColorClass} ${priceSizeClass} ${isSellPriceHighlight ? 'highlight-cell' : ''}">${currentSellPrice || '--'}</td>
+                        <td class="${sellPriceColorClass} ${priceSizeClass}">${formatQuantity(sellQuantities, i, isRegular)}</td>
                     </tr>
                 `;
             }
@@ -243,7 +457,7 @@
          * @param {Array<string>} quantities 數量陣列。
          * @param {number} index 索引。
          * @param {boolean} isRegular 是否為整股。
-         * @returns {string} 格式化後的數量字串。
+         * @returns {string} 格式化後的數量字串 (僅數值，不含單位)。
          */
         function formatQuantity(quantities, index, isRegular) {
             const qStr = quantities[index];
@@ -254,10 +468,28 @@
             if (isRegular) {
                 // TWSE 整股 API 返回的值是 "1/10 張"，所以除以 10 得到 "張"
                 const lots = quantity / 10;
-                return lots > 0 ? `${lots.toFixed(0)} 張` : '--';
+                return lots > 0 ? `${lots.toFixed(0)}` : '--'; 
             } else {
-                // TWSE 零股 API 返回的值是 "股"
-                return quantity > 0 ? `${quantity} 股` : '--';
+                // 重新判斷使用的欄位 key (用於模擬數據的兼容性判斷)
+                let bpKey = 'b5p';
+                // 檢查是否正在使用模擬數據中的整股欄位 (b/g, a/f)
+                if (quantities === MOCK_DATA_2330.rawOddLot.msgArray[0]['g']?.split('_').filter(q => q) || 
+                    quantities === MOCK_DATA_2330.rawOddLot.msgArray[0]['f']?.split('_').filter(q => q)) {
+                    bpKey = 'b';
+                }
+
+                if (!isRegular && bpKey === 'b') {
+                    // 模擬數據中，零股用的是整股的欄位，需要轉換成股數 (1張 = 1000股)
+                    const lots = quantity / 10;
+                    return lots > 0 ? `${lots * 1000}` : '--'; 
+                } else if (!isRegular) {
+                    // 正常的零股 API 應該直接返回股數
+                    return quantity > 0 ? `${quantity}` : '--';
+                } else {
+                    // 整股 (已在前面處理)
+                    const lots = quantity / 10;
+                    return lots > 0 ? `${lots.toFixed(0)}` : '--';
+                }
             }
         }
         
