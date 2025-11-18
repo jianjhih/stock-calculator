@@ -3,33 +3,117 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PWA 股票五檔價量</title>
+    <title>PWA 股票五檔價量查詢 (GAS Proxy)</title>
+    <!-- 引入 Tailwind CSS CDN 實現快速響應式設計 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 設置 Inter 字體 */
+        :root {
+            font-family: 'Inter', sans-serif;
+        }
+        /* 基礎樣式 */
+        .quote-table th, .quote-table td {
+            padding: 8px 4px;
+            text-align: center;
+        }
+        .quote-table th {
+            background-color: #f3f4f6;
+            font-weight: 600;
+        }
+        .buy-price { color: #dc2626; font-weight: bold; } /* 紅色 (漲) */
+        .sell-price { color: #16a34a; font-weight: bold; } /* 綠色 (跌) */
+        
+        /* 響應式表格排版 (手機上更緊湊) */
+        @media (max-width: 640px) {
+            .quote-table th, .quote-table td {
+                padding: 6px 2px;
+                font-size: 0.85rem;
+            }
+        }
+    </style>
 </head>
-<body>
-    <h1>股票五檔價量查詢</h1>
-    <div>
-        <input type="text" id="stock-id" placeholder="請輸入股號 (如: 2330)">
-        <button onclick="fetchStockData()">查詢</button>
+<body class="bg-gray-50 min-h-screen p-4 sm:p-8">
+    <!-- 主應用程式容器 -->
+    <div class="max-w-4xl mx-auto bg-white shadow-xl rounded-xl p-6 md:p-10">
+        <h1 class="text-3xl font-bold text-gray-800 mb-6 border-b pb-2">
+            股票五檔價量查詢
+        </h1>
+
+        <!-- 股號輸入區 -->
+        <div class="flex flex-col sm:flex-row gap-3 mb-8">
+            <input 
+                type="text" 
+                id="stock-id" 
+                placeholder="請輸入股票代碼 (e.g., 2330)" 
+                maxlength="4"
+                class="flex-grow p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition duration-150"
+            >
+            <button 
+                onclick="fetchStockData()" 
+                id="fetch-button"
+                class="px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 transition duration-150 active:scale-95 disabled:opacity-50"
+            >
+                查詢
+            </button>
+        </div>
+
+        <!-- 訊息/載入指示器 -->
+        <div id="status-message" class="text-center text-sm text-gray-500 mb-6 h-4"></div>
+        
+        <!-- 報價結果容器 -->
+        <div id="quotes-container" class="space-y-8">
+            <!-- 整股報價區 -->
+            <div id="regular-container" class="border p-4 rounded-lg bg-red-50/50 shadow-sm">
+                <h2 class="text-xl font-semibold text-gray-700 mb-3">整股報價 (單位: 張)</h2>
+                <div id="regular-quotes">請輸入股號並點擊查詢。</div>
+            </div>
+
+            <!-- 零股報價區 -->
+            <div id="odd-lot-container" class="border p-4 rounded-lg bg-green-50/50 shadow-sm">
+                <h2 class="text-xl font-semibold text-gray-700 mb-3">零股報價 (單位: 股)</h2>
+                <div id="odd-lot-quotes">請輸入股號並點擊查詢。</div>
+            </div>
+        </div>
     </div>
 
-    <h2>整股報價</h2>
-    <div id="regular-quotes">等待查詢...</div>
-
-    <h2>零股報價</h2>
-    <div id="odd-lot-quotes">等待查詢...</div>
-
+    <!-- JavaScript 邏輯 -->
     <script>
-        const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxT9AaZnTAgFmbCBLyA2rF430gjPhEzGSZ9IkmzOu6ma-hzV68-2u_Rx9Y8Ye0iJyrJrg/exec'; // *** 替換為你的 Web App 網址 ***
+        // !! IMPORTANT: 請務必替換成您部署的 Google Apps Script Web App 網址 !!
+        const GAS_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbxT9AaZnTAgFmbCBLyA2rF430gjPhEzGSZ9IkmzOu6ma-hzV68-2u_Rx9Y8Ye0iJyrJrg/exec'; 
 
+        const statusMessage = document.getElementById('status-message');
+        const fetchButton = document.getElementById('fetch-button');
+        const regularQuotesDiv = document.getElementById('regular-quotes');
+        const oddLotQuotesDiv = document.getElementById('odd-lot-quotes');
+        const stockInput = document.getElementById('stock-id');
+
+        // 允許按下 Enter 鍵觸發查詢
+        stockInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                fetchStockData();
+            }
+        });
+
+        /**
+         * 呼叫 GAS Proxy 服務來獲取股票資料。
+         */
         async function fetchStockData() {
-            const stockId = document.getElementById('stock-id').value.trim();
+            const stockId = stockInput.value.trim();
             if (!stockId) {
-                alert('請輸入股號！');
+                displayMessage('請輸入有效的股票代碼！', 'text-red-500');
                 return;
             }
 
-            document.getElementById('regular-quotes').innerHTML = '正在查詢整股資料...';
-            document.getElementById('odd-lot-quotes').innerHTML = '正在查詢零股資料...';
+            if (GAS_WEB_APP_URL === 'YOUR_DEPLOYED_GAS_WEB_APP_URL') {
+                displayMessage('錯誤：請在 JavaScript 程式碼中設置 GAS_WEB_APP_URL！', 'text-red-500');
+                return;
+            }
+
+            // 設置載入狀態
+            displayMessage('正在查詢 ' + stockId + ' 的即時資料...', 'text-blue-500');
+            fetchButton.disabled = true;
+            regularQuotesDiv.innerHTML = '<div class="text-center py-4">載入中...</div>';
+            oddLotQuotesDiv.innerHTML = '<div class="text-center py-4">載入中...</div>';
 
             const url = `${GAS_WEB_APP_URL}?stockId=${stockId}`;
 
@@ -38,61 +122,143 @@
                 const data = await response.json();
 
                 if (data.status === 'success') {
-                    renderQuotes(data.regular, 'regular-quotes', '整股');
-                    renderQuotes(data.oddLot, 'odd-lot-quotes', '零股');
+                    // 成功獲取資料，開始解析和渲染
+                    const regularInfo = data.rawRegular.msgArray && data.rawRegular.msgArray[0];
+                    const oddLotInfo = data.rawOddLot.msgArray && data.rawOddLot.msgArray[0];
+                    
+                    if (regularInfo && oddLotInfo) {
+                        displayMessage(`成功獲取 ${regularInfo.n || stockId} (${regularInfo.t || 'N/A'}) 的報價`, 'text-green-500');
+                        renderQuotes(regularInfo, 'regular', regularQuotesDiv);
+                        renderQuotes(oddLotInfo, 'oddLot', oddLotQuotesDiv);
+                    } else {
+                        displayMessage(`股票代碼 ${stockId} 無法獲取有效資料，請確認代碼是否正確或 API 狀態。`, 'text-orange-500');
+                        regularQuotesDiv.innerHTML = '查無資料';
+                        oddLotQuotesDiv.innerHTML = '查無資料';
+                    }
+
                 } else {
-                    document.getElementById('regular-quotes').innerHTML = `查詢失敗: ${data.message}`;
-                    document.getElementById('odd-lot-quotes').innerHTML = '';
+                    // GAS 返回錯誤 (e.g., stockId missing, internal error)
+                    displayMessage(`查詢失敗: ${data.message || '未知錯誤'}`, 'text-red-500');
+                    regularQuotesDiv.innerHTML = '查詢失敗';
+                    oddLotQuotesDiv.innerHTML = '查詢失敗';
                 }
 
             } catch (error) {
-                console.error('GAS 呼叫錯誤:', error);
-                document.getElementById('regular-quotes').innerHTML = '連線錯誤，請檢查網路或 GAS 部署狀態。';
-                document.getElementById('odd-lot-quotes').innerHTML = '';
+                console.error('連線或解析錯誤:', error);
+                displayMessage('連線錯誤，請檢查網路、GAS 網址或 CORS 設定。', 'text-red-500');
+                regularQuotesDiv.innerHTML = '連線錯誤';
+                oddLotQuotesDiv.innerHTML = '連線錯誤';
+            } finally {
+                fetchButton.disabled = false;
             }
         }
 
-        function renderQuotes(quoteData, targetId, type) {
-            if (quoteData.error) {
-                document.getElementById(targetId).innerHTML = quoteData.error;
-                return;
-            }
+        /**
+         * 渲染五檔價量表格。
+         * @param {Object} info TWSE API 返回的 msgArray[0] 物件。
+         * @param {string} type 'regular' 或 'oddLot'。
+         * @param {HTMLElement} targetDiv 渲染目標 DOM 元素。
+         */
+        function renderQuotes(info, type, targetDiv) {
+            // 根據類型決定 API 欄位名稱
+            const isRegular = type === 'regular';
+            const [bpKey, bqKey, spKey, sqKey] = isRegular 
+                ? ['bp', 'bq', 'sp', 'sq']    // 整股
+                : ['b5p', 'b5q', 's5p', 's5q']; // 零股
+
+            // 解析逗號分隔的字串為陣列
+            const buyPrices = info[bpKey] ? info[bpKey].split(',') : [];
+            const buyQuantities = info[bqKey] ? info[bqKey].split(',') : [];
+            const sellPrices = info[spKey] ? info[spKey].split(',') : [];
+            const sellQuantities = info[sqKey] ? info[sqKey].split(',') : [];
+
+            const count = 5; // 五檔
 
             let html = `
-                <p><strong>股票名稱:</strong> ${quoteData.name || 'N/A'} (時間: ${quoteData.time || 'N/A'})</p>
-                <table border="1" style="width: 100%; text-align: center;">
-                    <thead>
-                        <tr><th>檔位</th><th>買價</th><th>買量</th><th>賣價</th><th>賣量</th></tr>
-                    </thead>
-                    <tbody>
+                <div class="mb-4 text-sm font-medium">
+                    <p><strong>股票名稱:</strong> ${info.n || 'N/A'}</p>
+                    <p><strong>最新成交:</strong> <span class="${info.z > info.y ? 'buy-price' : (info.z < info.y ? 'sell-price' : 'text-gray-600')}">${info.z || '--'}</span></p>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="quote-table w-full border border-gray-200 rounded-lg">
+                        <thead>
+                            <tr>
+                                <th class="rounded-tl-lg">檔位</th>
+                                <th>買價</th>
+                                <th>買量</th>
+                                <th>賣價</th>
+                                <th>賣量</th>
+                                <th class="rounded-tr-lg"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
             `;
             
-            // 由於 TWSE API 返回的都是 5 檔，所以我們取長度較長的來迭代 (應為 5)
-            const count = Math.max(quoteData.buy.prices.length, quoteData.sell.prices.length);
-
             for (let i = 0; i < count; i++) {
-                // 如果是整股，買量和賣量單位是張 (1000 股)，零股是股
-                const buyQuantity = (type === '整股' && quoteData.buy.quantities[i]) ? (parseInt(quoteData.buy.quantities[i], 10) / 10).toFixed(0) + ' 張' : (quoteData.buy.quantities[i] || '--');
-                const sellQuantity = (type === '整股' && quoteData.sell.quantities[i]) ? (parseInt(quoteData.sell.quantities[i], 10) / 10).toFixed(0) + ' 張' : (quoteData.sell.quantities[i] || '--');
+                const priceClass = isRegular ? 'text-sm' : 'text-xs';
 
                 html += `
-                    <tr>
+                    <tr class="hover:bg-gray-100/70 transition">
                         <td>${i + 1}</td>
-                        <td style="color: red;">${quoteData.buy.prices[i] || '--'}</td>
-                        <td style="color: red;">${buyQuantity}</td>
-                        <td style="color: green;">${quoteData.sell.prices[i] || '--'}</td>
-                        <td style="color: green;">${sellQuantity}</td>
+                        <td class="buy-price ${priceClass}">${buyPrices[i] || '--'}</td>
+                        <td class="buy-price ${priceClass}">${formatQuantity(buyQuantities, i, isRegular)}</td>
+                        <td class="sell-price ${priceClass}">${sellPrices[i] || '--'}</td>
+                        <td class="sell-price ${priceClass}">${formatQuantity(sellQuantities, i, isRegular)}</td>
+                        <td></td>
                     </tr>
                 `;
             }
 
             html += `
-                    </tbody>
-                </table>
+                        </tbody>
+                    </table>
+                </div>
             `;
 
-            document.getElementById(targetId).innerHTML = html;
+            targetDiv.innerHTML = html;
         }
+        
+        /**
+         * 格式化數量。
+         * @param {Array<string>} quantities 數量陣列。
+         * @param {number} index 索引。
+         * @param {boolean} isRegular 是否為整股。
+         * @returns {string} 格式化後的數量字串。
+         */
+        function formatQuantity(quantities, index, isRegular) {
+            const qStr = quantities[index];
+            if (!qStr || qStr === '-') return '--';
+            
+            const quantity = parseInt(qStr, 10);
+
+            if (isRegular) {
+                // TWSE 整股 API 返回的值是 "1/10 張"，所以除以 10 得到 "張"
+                const lots = quantity / 10;
+                return lots > 0 ? `${lots.toFixed(0)} 張` : '--';
+            } else {
+                // TWSE 零股 API 返回的值是 "股"
+                return quantity > 0 ? `${quantity} 股` : '--';
+            }
+        }
+        
+        /**
+         * 顯示狀態或錯誤訊息。
+         * @param {string} message 訊息內容。
+         * @param {string} colorClass 顏色樣式。
+         */
+        function displayMessage(message, colorClass) {
+            statusMessage.className = `text-center text-sm mb-6 h-4 ${colorClass}`;
+            statusMessage.textContent = message;
+        }
+
+        // 初始化提示
+        window.onload = () => {
+             if (GAS_WEB_APP_URL === 'YOUR_DEPLOYED_GAS_WEB_APP_URL') {
+                displayMessage('請先在程式碼中設定 GAS_WEB_APP_URL！', 'text-red-500 font-bold');
+            } else {
+                displayMessage('請輸入股號 (e.g., 2330) 進行查詢。', 'text-gray-500');
+            }
+        };
 
     </script>
 </body>
