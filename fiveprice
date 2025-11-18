@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PWA 股票五檔價量</title>
+</head>
+<body>
+    <h1>股票五檔價量查詢</h1>
+    <div>
+        <input type="text" id="stock-id" placeholder="請輸入股號 (如: 2330)">
+        <button onclick="fetchStockData()">查詢</button>
+    </div>
+
+    <h2>整股報價</h2>
+    <div id="regular-quotes">等待查詢...</div>
+
+    <h2>零股報價</h2>
+    <div id="odd-lot-quotes">等待查詢...</div>
+
+    <script>
+        const GAS_WEB_APP_URL = 'YOUR_DEPLOYED_GAS_URL_HERE'; // *** 替換為你的 Web App 網址 ***
+
+        async function fetchStockData() {
+            const stockId = document.getElementById('stock-id').value.trim();
+            if (!stockId) {
+                alert('請輸入股號！');
+                return;
+            }
+
+            document.getElementById('regular-quotes').innerHTML = '正在查詢整股資料...';
+            document.getElementById('odd-lot-quotes').innerHTML = '正在查詢零股資料...';
+
+            const url = `${GAS_WEB_APP_URL}?stockId=${stockId}`;
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    renderQuotes(data.regular, 'regular-quotes', '整股');
+                    renderQuotes(data.oddLot, 'odd-lot-quotes', '零股');
+                } else {
+                    document.getElementById('regular-quotes').innerHTML = `查詢失敗: ${data.message}`;
+                    document.getElementById('odd-lot-quotes').innerHTML = '';
+                }
+
+            } catch (error) {
+                console.error('GAS 呼叫錯誤:', error);
+                document.getElementById('regular-quotes').innerHTML = '連線錯誤，請檢查網路或 GAS 部署狀態。';
+                document.getElementById('odd-lot-quotes').innerHTML = '';
+            }
+        }
+
+        function renderQuotes(quoteData, targetId, type) {
+            if (quoteData.error) {
+                document.getElementById(targetId).innerHTML = quoteData.error;
+                return;
+            }
+
+            let html = `
+                <p><strong>股票名稱:</strong> ${quoteData.name || 'N/A'} (時間: ${quoteData.time || 'N/A'})</p>
+                <table border="1" style="width: 100%; text-align: center;">
+                    <thead>
+                        <tr><th>檔位</th><th>買價</th><th>買量</th><th>賣價</th><th>賣量</th></tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            // 由於 TWSE API 返回的都是 5 檔，所以我們取長度較長的來迭代 (應為 5)
+            const count = Math.max(quoteData.buy.prices.length, quoteData.sell.prices.length);
+
+            for (let i = 0; i < count; i++) {
+                // 如果是整股，買量和賣量單位是張 (1000 股)，零股是股
+                const buyQuantity = (type === '整股' && quoteData.buy.quantities[i]) ? (parseInt(quoteData.buy.quantities[i], 10) / 10).toFixed(0) + ' 張' : (quoteData.buy.quantities[i] || '--');
+                const sellQuantity = (type === '整股' && quoteData.sell.quantities[i]) ? (parseInt(quoteData.sell.quantities[i], 10) / 10).toFixed(0) + ' 張' : (quoteData.sell.quantities[i] || '--');
+
+                html += `
+                    <tr>
+                        <td>${i + 1}</td>
+                        <td style="color: red;">${quoteData.buy.prices[i] || '--'}</td>
+                        <td style="color: red;">${buyQuantity}</td>
+                        <td style="color: green;">${quoteData.sell.prices[i] || '--'}</td>
+                        <td style="color: green;">${sellQuantity}</td>
+                    </tr>
+                `;
+            }
+
+            html += `
+                    </tbody>
+                </table>
+            `;
+
+            document.getElementById(targetId).innerHTML = html;
+        }
+
+    </script>
+</body>
+</html>
